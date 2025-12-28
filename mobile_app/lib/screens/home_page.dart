@@ -15,47 +15,46 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   File? selectedImage;
   Uint8List? denoisedImage;
-  bool loading = false;
 
   double strength = 1.0;
   bool sharpen = false;
+  bool loading = false;
 
-  String psnr = "";
-  String ssim = "";
-  String mse = "";
+  // 👇 THIS MAKES THE SLIDER MOVABLE
+  double sliderPosition = 0.5;
 
-  // If Android phone: replace with IPv4 (ipconfig)
+  // 📌 CHANGE ONLY IF USING ANDROID (use IPv4 from ipconfig)
   final String api = "http://127.0.0.1:5000/denoise";
+
+  String psnr = "", ssim = "", mse = "";
 
   Future pickImage() async {
     final img = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (img != null) {
-      setState(() {
-        selectedImage = File(img.path);
-        denoisedImage = null;
-        psnr = ssim = mse = "";
-      });
-    }
+    if (img == null) return;
+    setState(() {
+      selectedImage = File(img.path);
+      denoisedImage = null;
+      psnr = ssim = mse = "";
+      sliderPosition = 0.5;
+    });
   }
 
   Future runDenoise() async {
     if (selectedImage == null) return;
-
     setState(() => loading = true);
 
-    final b64 = base64Encode(selectedImage!.readAsBytesSync());
-    final resp = await http.post(
+    final bytes = await selectedImage!.readAsBytes();
+    final response = await http.post(
       Uri.parse(api),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "image": b64,
+        "image": base64Encode(bytes),
         "strength": strength,
-        "sharpen": sharpen,
+        "sharpen": sharpen
       }),
     );
 
-    final data = jsonDecode(resp.body);
-
+    final data = jsonDecode(response.body);
     setState(() {
       denoisedImage = base64Decode(data["denoised_image"]);
       psnr = data["metrics"]["psnr"].toString();
@@ -80,6 +79,7 @@ class _HomePageState extends State<HomePage> {
           children: [
             const SizedBox(height: 20),
 
+            // -------------- BEFORE/AFTER WIDGET (SLIDER FIXED & MOVABLE) ------------
             if (selectedImage != null && denoisedImage != null)
               Container(
                 height: 260,
@@ -87,13 +87,19 @@ class _HomePageState extends State<HomePage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
                   color: Colors.white,
-                  boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black26)],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
                   child: BeforeAfter(
                     before: Image.file(selectedImage!, fit: BoxFit.cover),
                     after: Image.memory(denoisedImage!, fit: BoxFit.cover),
+
+                    // 👇 THIS MAKES THE DIVIDER SLIDE
+                    value: sliderPosition,
+                    onValueChanged: (v) {
+                      setState(() => sliderPosition = v);
+                    },
+
                   ),
                 ),
               ),
@@ -103,16 +109,16 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 20),
 
+            // ---------------- SLIDER (NO BREAKING PROPERTIES) ----------------
             Text("Denoise Strength: ${(strength * 100).toInt()}%"),
             Slider(
               value: strength,
               min: 0,
               max: 1,
-              divisions: 100,
-              label: "${(strength * 100).toInt()}%",
               onChanged: (v) => setState(() => strength = v),
             ),
 
+            // ---------------- SWITCH (WINDOWS COMPATIBLE) ----------------
             SwitchListTile(
               title: const Text("Sharpen Output"),
               value: sharpen,
@@ -121,14 +127,14 @@ class _HomePageState extends State<HomePage> {
 
             if (loading) const CircularProgressIndicator(),
 
+            // ---------------- METRICS DISPLAY ----------------
             if (denoisedImage != null)
               Container(
-                margin: const EdgeInsets.all(12),
                 padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6)],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -140,6 +146,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
+            // ---------------- ACTION BUTTONS ----------------
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
