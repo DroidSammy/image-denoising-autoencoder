@@ -5,8 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -17,12 +15,14 @@ class _HomePageState extends State<HomePage> {
   bool loading = false;
 
   double strength = 1.0;
-  bool sharpen = false;
+
+  // 🔥 Sharpen ON by default (no toggle)
+  final bool sharpen = true;
 
   double? psnr, ssim, mse;
 
   final picker = ImagePicker();
-  final String api = "http://127.0.0.1:5000/denoise"; // 👈 Backend Address
+  final String api = "http://127.0.0.1:5000/denoise"; // Backend URL
 
   Future<void> pickImage() async {
     final file = await picker.pickImage(source: ImageSource.gallery);
@@ -45,7 +45,7 @@ class _HomePageState extends State<HomePage> {
       final body = jsonEncode({
         "image": base64Encode(originalImg!),
         "strength": strength,
-        "sharpen": sharpen
+        "sharpen": true // 👈 ALWAYS TRUE
       });
 
       final res = await http.post(
@@ -80,13 +80,13 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("🧽 Image Denoising App"), centerTitle: true),
+      appBar: AppBar(title: Text("🧽 Image Denoising App"), centerTitle: true),
 
       body: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(12),
         child: Column(
           children: [
-            // 📌 Image Preview Area
+
             Expanded(
               child: Container(
                 alignment: Alignment.center,
@@ -95,7 +95,7 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: originalImg == null
-                    ? const Text("📸 Select an image to start")
+                    ? Text("📸 Select an image to start")
                     : denoisedImg == null
                         ? Image.memory(originalImg!)
                         : Row(
@@ -108,60 +108,45 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
 
-            // 📌 Strength Slider
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Denoise Strength", style: TextStyle(fontSize: 16)),
-                Slider(
-                  value: strength,
-                  min: 0.0,
-                  max: 1.0,
-                  divisions: 10,
-                  label: strength.toStringAsFixed(1),
-                  onChanged: (v) => setState(() => strength = v),
-                ),
-              ],
+            Text("Denoise Strength", style: TextStyle(fontSize: 16)),
+            Slider(
+              value: strength,
+              min: 0.0,
+              max: 1.0,
+              divisions: 10,
+              label: strength.toStringAsFixed(1),
+              onChanged: (v) => setState(() => strength = v),
             ),
 
-            // 📌 Sharpen Toggle
-            SwitchListTile(
-              value: sharpen,
-              title: const Text("Sharpen Output"),
-              onChanged: (v) => setState(() => sharpen = v),
-            ),
+            SizedBox(height: 10),
 
-            const SizedBox(height: 8),
-
-            // 📌 Buttons
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton(
                     onPressed: pickImage,
-                    child: const Text("📁 Pick Image"),
+                    child: Text("📁 Pick Image"),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: loading ? null : runDenoise,
                     child: loading
-                        ? const CircularProgressIndicator()
-                        : const Text("🚀 Denoise"),
+                        ? CircularProgressIndicator()
+                        : Text("🚀 Denoise"),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
 
-            // 📌 Metrics Display
             if (psnr != null)
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(10)),
