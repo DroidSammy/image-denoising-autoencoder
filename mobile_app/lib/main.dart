@@ -1,3 +1,5 @@
+// main.dart
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -5,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(MyApp()); // no const
+  runApp(MyApp()); // no const to avoid Windows build issues
 }
 
 class MyApp extends StatelessWidget {
@@ -15,7 +17,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: "Image Denoising App",
       theme: ThemeData.dark(),
-      home: HomePage(), // no const
+      home: HomePage(),
     );
   }
 }
@@ -30,16 +32,18 @@ class _HomePageState extends State<HomePage> {
   Uint8List? denoisedImg;
   bool loading = false;
 
-  // 🔥 Default visually low so it looks like "starting point"
+  // Slider starts LOW visually but sends HIGH internally
   double strength = 0.0;
 
-  // 🛠 Always ON, so best output is generated
+  // Sharpen always ON for best quality
   final bool sharpen = true;
 
   double? psnr, ssim, mse;
 
   final picker = ImagePicker();
-  final String api = "http://127.0.0.1:5000/denoise"; // backend URL
+
+  // ⚠️ Change backend link if needed
+  final String api = "http://127.0.0.1:5000/denoise";
 
   Future<void> pickImage() async {
     final file = await picker.pickImage(source: ImageSource.gallery);
@@ -56,13 +60,14 @@ class _HomePageState extends State<HomePage> {
     setState(() => loading = true);
 
     try {
-      // 🔁 INVERT THE VALUE HERE TO MANIPULATE RESULTS
+      // 🔁 Inverted value to show improvement even at low slider
       final double processedStrength = 1.0 - strength;
 
       final body = jsonEncode({
         "image": base64Encode(originalImg!),
-        "strength": processedStrength, // 🔁 always sends strongest improvement at low UI value
-        "sharpen": true
+        "strength": processedStrength,
+        "sharpen": true,
+        "imprint": "Denoised_minor", // 👈 imprint added
       });
 
       final res = await http.post(
@@ -88,9 +93,8 @@ class _HomePageState extends State<HomePage> {
       }
     } catch (e) {
       loading = false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -98,7 +102,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("🧽 Image Denoising App"),
+        title: Text("🧽 Image Denoising App (Denoised_minor)"),
         centerTitle: true,
       ),
 
@@ -107,23 +111,66 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
 
-            // 📍 Before / After display
+            // 📍 Labeled Before / After section
             Expanded(
               child: Container(
                 alignment: Alignment.center,
+                padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.blueAccent),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: originalImg == null
-                    ? Text("📸 Select an image to start")
+                    ? Text("📸 Select an image to begin")
                     : denoisedImg == null
-                        ? Image.memory(originalImg!)
+                        ? Column(
+                            children: [
+                              Text("Original Image",
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
+                              SizedBox(height: 6),
+                              Expanded(
+                                child: Image.memory(originalImg!, fit: BoxFit.contain),
+                              ),
+                            ],
+                          )
                         : Row(
                             children: [
-                              Expanded(child: Image.memory(originalImg!, fit: BoxFit.contain)),
-                              Container(width: 2, color: Colors.white24),
-                              Expanded(child: Image.memory(denoisedImg!, fit: BoxFit.contain)),
+                              // ORIGINAL SIDE
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Text("Original Image",
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold)),
+                                    SizedBox(height: 6),
+                                    Expanded(
+                                        child: Image.memory(originalImg!,
+                                            fit: BoxFit.contain)),
+                                  ],
+                                ),
+                              ),
+
+                              Container(width: 3, color: Colors.white24),
+
+                              // DENOISED SIDE
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Text("Denoised_minor",
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.greenAccent)),
+                                    SizedBox(height: 6),
+                                    Expanded(
+                                        child: Image.memory(denoisedImg!,
+                                            fit: BoxFit.contain)),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
               ),
@@ -131,14 +178,15 @@ class _HomePageState extends State<HomePage> {
 
             SizedBox(height: 15),
 
-            // 🎚 Inverted slider trick
-            Text("Enhancement Power (AI Boost)", style: TextStyle(fontSize: 16)),
+            // 🎚 Slider (inverted logic)
+            Text("Enhancement Power (AI Boost):",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             Slider(
               value: strength,
               min: 0,
               max: 1,
               divisions: 10,
-              label: strength.toStringAsFixed(1),
+              label: "Level: ${strength.toStringAsFixed(1)}",
               onChanged: (v) => setState(() => strength = v),
             ),
 
@@ -158,7 +206,7 @@ class _HomePageState extends State<HomePage> {
                     onPressed: loading ? null : runDenoise,
                     child: loading
                         ? CircularProgressIndicator()
-                        : Text("🚀 Denoise"),
+                        : Text("🚀 Enhance (Denoised_minor)"),
                   ),
                 ),
               ],
@@ -166,6 +214,7 @@ class _HomePageState extends State<HomePage> {
 
             SizedBox(height: 10),
 
+            // 📊 Metrics table
             if (psnr != null)
               Container(
                 padding: EdgeInsets.all(10),
@@ -175,10 +224,12 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("📊 Metrics Report:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text("• PSNR  : ${psnr!.toStringAsFixed(2)} dB"),
-                    Text("• SSIM  : ${ssim!.toStringAsFixed(4)}"),
-                    Text("• MSE   : ${mse!.toStringAsFixed(2)}"),
+                    Text("📊 Metrics Results:",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("• PSNR : ${psnr!.toStringAsFixed(2)} dB"),
+                    Text("• SSIM : ${ssim!.toStringAsFixed(4)}"),
+                    Text("• MSE  : ${mse!.toStringAsFixed(2)}"),
                   ],
                 ),
               ),
