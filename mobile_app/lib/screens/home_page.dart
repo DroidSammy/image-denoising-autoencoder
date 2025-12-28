@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,152 +7,158 @@ import 'package:http/http.dart' as http;
 import 'package:before_after/before_after.dart';
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  Uint8List? originalBytes, denoisedBytes;
-  double psnr = 0, ssim = 0, mse = 0;
-  double denoiseStrength = 1.0;
-  bool sharpen = false;
-  final picker = ImagePicker();
+  File? selectedImage;
+  Uint8List? denoisedImage;
+  bool loading = false;
 
-  // PICK IMAGE
+  double strength = 1.0;
+  bool sharpen = false;
+
+  String psnr = "";
+  String ssim = "";
+  String mse = "";
+
+  // If Android phone: replace with IPv4 (ipconfig)
+  final String api = "http://127.0.0.1:5000/denoise";
+
   Future pickImage() async {
-    final img = await picker.pickImage(source: ImageSource.gallery);
+    final img = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (img != null) {
-      originalBytes = await img.readAsBytes();
-      denoisedBytes = null;
-      setState(() {});
+      setState(() {
+        selectedImage = File(img.path);
+        denoisedImage = null;
+        psnr = ssim = mse = "";
+      });
     }
   }
 
-  // CALL BACKEND API
-  Future denoise() async {
-    if (originalBytes == null) return;
+  Future runDenoise() async {
+    if (selectedImage == null) return;
 
-    final url = Uri.parse("http://127.0.0.1:5000/denoise");
+    setState(() => loading = true);
 
-    final response = await http.post(
-      url,
+    final b64 = base64Encode(selectedImage!.readAsBytesSync());
+    final resp = await http.post(
+      Uri.parse(api),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "image": base64Encode(originalBytes!),
-        "strength": denoiseStrength,
-        "sharpen": sharpen
+        "image": b64,
+        "strength": strength,
+        "sharpen": sharpen,
       }),
     );
 
-    final data = jsonDecode(response.body);
+    final data = jsonDecode(resp.body);
 
     setState(() {
-      denoisedBytes = base64Decode(data['denoised_image']);
-      psnr = data['metrics']['psnr'];
-      ssim = data['metrics']['ssim'];
-      mse  = data['metrics']['mse'];
+      denoisedImage = base64Decode(data["denoised_image"]);
+      psnr = data["metrics"]["psnr"].toString();
+      ssim = data["metrics"]["ssim"].toString();
+      mse = data["metrics"]["mse"].toString();
+      loading = false;
     });
-  }
-
-  // SAVE OUTPUT (placeholder)
-  void saveOutput() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("💾 Save feature will be added soon...")),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xfff7eef7),
+      backgroundColor: const Color(0xfff6eaff),
       appBar: AppBar(
-        title: Text("Image Denoising Autoencoder"),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.purple,
+        title: const Text("Image Denoising Autoencoder",
+            style: TextStyle(color: Colors.white)),
       ),
 
-      body: Column(
-        children: [
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
 
-          // SHOW ORIGINAL BEFORE DENOISE
-          if (originalBytes != null && denoisedBytes == null)
-            Expanded(
-              child: Center(child: Image.memory(originalBytes!)),
-            ),
-
-          // SHOW BEFORE / AFTER SLIDER
-          if (originalBytes != null && denoisedBytes != null)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: BeforeAfter(
-                  before: Image.memory(originalBytes!),
-                  after: Image.memory(denoisedBytes!),
+            if (selectedImage != null && denoisedImage != null)
+              Container(
+                height: 260,
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(blurRadius: 10, color: Colors.black26)],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: BeforeAfter(
+                    before: Image.file(selectedImage!, fit: BoxFit.cover),
+                    after: Image.memory(denoisedImage!, fit: BoxFit.cover),
+                  ),
                 ),
               ),
+
+            if (selectedImage != null && denoisedImage == null)
+              Image.file(selectedImage!, height: 260, fit: BoxFit.cover),
+
+            const SizedBox(height: 20),
+
+            Text("Denoise Strength: ${(strength * 100).toInt()}%"),
+            Slider(
+              value: strength,
+              min: 0,
+              max: 1,
+              divisions: 100,
+              label: "${(strength * 100).toInt()}%",
+              onChanged: (v) => setState(() => strength = v),
             ),
 
-          // 📌 TECHNICAL METRICS DISPLAY
-          if (denoisedBytes != null) ...[
-            SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              margin: EdgeInsets.symmetric(horizontal: 20),
-              padding: EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("📊 Technical Parameters",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 10),
-                  Text("• PSNR : $psnr dB (Higher = Better)"),
-                  Text("• SSIM : $ssim (Closer to 1 = More Similar)"),
-                  Text("• MSE  : $mse (Lower = Less Noise)"),
-                ],
-              ),
+            SwitchListTile(
+              title: const Text("Sharpen Output"),
+              value: sharpen,
+              onChanged: (v) => setState(() => sharpen = v),
             ),
+
+            if (loading) const CircularProgressIndicator(),
+
+            if (denoisedImage != null)
+              Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6)],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text("PSNR: $psnr dB"),
+                    Text("SSIM: $ssim"),
+                    Text("MSE: $mse"),
+                  ],
+                ),
+              ),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: pickImage,
+                  icon: const Icon(Icons.photo),
+                  label: const Text("Pick Image"),
+                ),
+                ElevatedButton.icon(
+                  onPressed: runDenoise,
+                  icon: const Icon(Icons.auto_fix_high),
+                  label: const Text("Denoise"),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 40),
           ],
-
-          SizedBox(height: 10),
-
-          // 🔧 STRENGTH SLIDER
-          Text("Denoise Strength: ${(denoiseStrength * 100).round()}%"),
-          Slider(
-            value: denoiseStrength,
-            min: 0.1,
-            max: 1.0,
-            divisions: 9,
-            label: "${(denoiseStrength * 100).round()}%",
-            onChanged: (v) => setState(() => denoiseStrength = v),
-          ),
-
-          // SHARPEN OPTION
-          SwitchListTile(
-            title: Text("Sharpen Output"),
-            value: sharpen,
-            onChanged: (v) => setState(() => sharpen = v),
-          ),
-
-          SizedBox(height: 10),
-
-          // 👉 BUTTONS
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(onPressed: pickImage, child: Text("📁 Pick Image")),
-              SizedBox(width: 10),
-              ElevatedButton(onPressed: denoise, child: Text("✨ Denoise")),
-              SizedBox(width: 10),
-              ElevatedButton(onPressed: saveOutput, child: Text("💾 Save")),
-            ],
-          ),
-
-          SizedBox(height: 15),
-        ],
+        ),
       ),
     );
   }
