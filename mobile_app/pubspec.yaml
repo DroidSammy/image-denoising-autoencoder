@@ -1,11 +1,31 @@
 name: image_denoising_app
+description: A Flutter app for image denoising with backend inference.
+publish_to: "none"
+
+version: 1.0.0+1
+
 environment:
-  sdk: '^3.10.0'
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.0
+
+  # 📌 Network + API calls
+  http: ^1.1.0
+
+  # 📌 Pick image from gallery
   image_picker: ^1.0.4
-  flutter_image_compress: ^2.0.4
-  before_after: ^3.1.0   # 👈 split slider package
+
+  # (Optional) For more file handling if needed later
+  path_provider: ^2.1.2
+
+  # Flutter UI related dependencies (built-in)
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

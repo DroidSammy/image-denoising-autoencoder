@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'screens/home_page.dart';
 
 void main() {
-  runApp(const ImageDenoiseApp());
+  runApp(const DenoiseApp());
 }
 
-class ImageDenoiseApp extends StatelessWidget {
-  const ImageDenoiseApp({super.key});
+class DenoiseApp extends StatelessWidget {
+  const DenoiseApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: "Image Denoising",
       debugShowCheckedModeBanner: false,
-      title: "Image Denoising Autoencoder",
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purple),
-        useMaterial3: true,
+        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
       ),
       home: const HomePage(),
     );

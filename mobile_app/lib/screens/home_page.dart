@@ -1,169 +1,180 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:before_after/before_after.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  File? selectedImage;
-  Uint8List? denoisedImage;
+  Uint8List? originalImg;
+  Uint8List? denoisedImg;
+  bool loading = false;
 
   double strength = 1.0;
   bool sharpen = false;
-  bool loading = false;
 
-  // 👇 THIS MAKES THE SLIDER MOVABLE
-  double sliderPosition = 0.5;
+  double? psnr, ssim, mse;
 
-  // 📌 CHANGE ONLY IF USING ANDROID (use IPv4 from ipconfig)
-  final String api = "http://127.0.0.1:5000/denoise";
+  final picker = ImagePicker();
+  final String api = "http://127.0.0.1:5000/denoise"; // 👈 Backend Address
 
-  String psnr = "", ssim = "", mse = "";
+  Future<void> pickImage() async {
+    final file = await picker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
 
-  Future pickImage() async {
-    final img = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (img == null) return;
+    final bytes = await file.readAsBytes();
     setState(() {
-      selectedImage = File(img.path);
-      denoisedImage = null;
-      psnr = ssim = mse = "";
-      sliderPosition = 0.5;
+      originalImg = bytes;
+      denoisedImg = null;
+      psnr = ssim = mse = null;
     });
   }
 
-  Future runDenoise() async {
-    if (selectedImage == null) return;
+  Future<void> runDenoise() async {
+    if (originalImg == null) return;
+
     setState(() => loading = true);
 
-    final bytes = await selectedImage!.readAsBytes();
-    final response = await http.post(
-      Uri.parse(api),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "image": base64Encode(bytes),
+    try {
+      final body = jsonEncode({
+        "image": base64Encode(originalImg!),
         "strength": strength,
         "sharpen": sharpen
-      }),
-    );
+      });
 
-    final data = jsonDecode(response.body);
-    setState(() {
-      denoisedImage = base64Decode(data["denoised_image"]);
-      psnr = data["metrics"]["psnr"].toString();
-      ssim = data["metrics"]["ssim"].toString();
-      mse = data["metrics"]["mse"].toString();
-      loading = false;
-    });
+      final res = await http.post(
+        Uri.parse(api),
+        headers: {"Content-Type": "application/json"},
+        body: body,
+      );
+
+      if (res.statusCode != 200) {
+        setState(() => loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Backend error: ${res.body}")),
+        );
+        return;
+      }
+
+      final data = jsonDecode(res.body);
+      setState(() {
+        denoisedImg = base64Decode(data["image"]);
+        psnr = data["psnr"];
+        ssim = data["ssim"];
+        mse = data["mse"];
+        loading = false;
+      });
+    } catch (e) {
+      setState(() => loading = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("⚠ Error: $e")));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xfff6eaff),
-      appBar: AppBar(
-        backgroundColor: Colors.purple,
-        title: const Text("Image Denoising Autoencoder",
-            style: TextStyle(color: Colors.white)),
-      ),
+      appBar: AppBar(title: const Text("🧽 Image Denoising App"), centerTitle: true),
 
-      body: SingleChildScrollView(
+      body: Padding(
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            const SizedBox(height: 20),
-
-            // -------------- BEFORE/AFTER WIDGET (SLIDER FIXED & MOVABLE) ------------
-            if (selectedImage != null && denoisedImage != null)
-              Container(
-                height: 260,
-                margin: const EdgeInsets.all(16),
+            // 📌 Image Preview Area
+            Expanded(
+              child: Container(
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  color: Colors.white,
+                  border: Border.all(color: Colors.blueAccent),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: BeforeAfter(
-                    before: Image.file(selectedImage!, fit: BoxFit.cover),
-                    after: Image.memory(denoisedImage!, fit: BoxFit.cover),
-
-                    // 👇 THIS MAKES THE DIVIDER SLIDE
-                    value: sliderPosition,
-                    onValueChanged: (v) {
-                      setState(() => sliderPosition = v);
-                    },
-
-                  ),
-                ),
+                child: originalImg == null
+                    ? const Text("📸 Select an image to start")
+                    : denoisedImg == null
+                        ? Image.memory(originalImg!)
+                        : Row(
+                            children: [
+                              Expanded(child: Image.memory(originalImg!, fit: BoxFit.contain)),
+                              Container(width: 2, color: Colors.white24),
+                              Expanded(child: Image.memory(denoisedImg!, fit: BoxFit.contain)),
+                            ],
+                          ),
               ),
-
-            if (selectedImage != null && denoisedImage == null)
-              Image.file(selectedImage!, height: 260, fit: BoxFit.cover),
-
-            const SizedBox(height: 20),
-
-            // ---------------- SLIDER (NO BREAKING PROPERTIES) ----------------
-            Text("Denoise Strength: ${(strength * 100).toInt()}%"),
-            Slider(
-              value: strength,
-              min: 0,
-              max: 1,
-              onChanged: (v) => setState(() => strength = v),
             ),
 
-            // ---------------- SWITCH (WINDOWS COMPATIBLE) ----------------
-            SwitchListTile(
-              title: const Text("Sharpen Output"),
-              value: sharpen,
-              onChanged: (v) => setState(() => sharpen = v),
-            ),
+            const SizedBox(height: 12),
 
-            if (loading) const CircularProgressIndicator(),
-
-            // ---------------- METRICS DISPLAY ----------------
-            if (denoisedImage != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Text("PSNR: $psnr dB"),
-                    Text("SSIM: $ssim"),
-                    Text("MSE: $mse"),
-                  ],
-                ),
-              ),
-
-            // ---------------- ACTION BUTTONS ----------------
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            // 📌 Strength Slider
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton.icon(
-                  onPressed: pickImage,
-                  icon: const Icon(Icons.photo),
-                  label: const Text("Pick Image"),
-                ),
-                ElevatedButton.icon(
-                  onPressed: runDenoise,
-                  icon: const Icon(Icons.auto_fix_high),
-                  label: const Text("Denoise"),
+                const Text("Denoise Strength", style: TextStyle(fontSize: 16)),
+                Slider(
+                  value: strength,
+                  min: 0.0,
+                  max: 1.0,
+                  divisions: 10,
+                  label: strength.toStringAsFixed(1),
+                  onChanged: (v) => setState(() => strength = v),
                 ),
               ],
             ),
 
-            const SizedBox(height: 40),
+            // 📌 Sharpen Toggle
+            SwitchListTile(
+              value: sharpen,
+              title: const Text("Sharpen Output"),
+              onChanged: (v) => setState(() => sharpen = v),
+            ),
+
+            const SizedBox(height: 8),
+
+            // 📌 Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: pickImage,
+                    child: const Text("📁 Pick Image"),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: loading ? null : runDenoise,
+                    child: loading
+                        ? const CircularProgressIndicator()
+                        : const Text("🚀 Denoise"),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // 📌 Metrics Display
+            if (psnr != null)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("📊 Metrics:", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text("• PSNR  : ${psnr!.toStringAsFixed(2)}"),
+                    Text("• SSIM  : ${ssim!.toStringAsFixed(4)}"),
+                    Text("• MSE   : ${mse!.toStringAsFixed(2)}"),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
