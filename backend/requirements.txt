@@ -3,3 +3,7 @@ torchvision
 opencv-python
 flask
 numpy
+Flask
+opencv-python
+numpy
+werkzeug

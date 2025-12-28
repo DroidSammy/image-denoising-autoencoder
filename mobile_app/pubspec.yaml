@@ -1,19 +1,16 @@
 name: mobile_app
-description: Image Denoising Flutter App
+description: Image denoising autoencoder app
 publish_to: 'none'
 
-version: 1.0.0+1
-
 environment:
-  sdk: ">=3.0.0 <4.0.0"
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-
-  image_picker: ^1.0.7
   http: ^1.2.0
-  path_provider: ^2.1.2
+  image_picker: ^1.0.4
+  before_after: ^3.2.0   # NEW (Dart 3 compatible)
 
 dev_dependencies:
   flutter_test:
